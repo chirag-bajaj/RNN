@@ -6,6 +6,9 @@ from unicodedata import category
 import unidecode
 import string
 
+choice = input("1. RNN \n2. LSTM \n3. GRU\n")
+choice = int(choice)
+
 all_letters = string.ascii_letters + ".,;'"
 n_letters = len(all_letters)
 print(n_letters)
@@ -71,6 +74,48 @@ class RNN(nn.Module):
     def initHidden(self):
         return torch.zeros(1, 1, self.hidden_size)
 
+class LSTM(nn.Module):
+    def __init__(self, input_size, hidden_size, cell_size, output_size):
+        super(LSTM, self).__init__()
+
+        self.hidden_size = hidden_size
+        self.cell_size = cell_size
+        self.lstm = nn.LSTM(input_size, hidden_size)
+        self.fc = nn.Linear(hidden_size*1, output_size)
+        self.log_softmax = nn.LogSoftmax()
+
+    def forward(self, x, h):
+        out, hid = self.lstm(x, h)
+        out = out.squeeze()
+        out = self.fc(out)
+        out = self.log_softmax(out)
+        return out, hid
+    
+    def initHidden(self):
+        return torch.zeros(1, 1, self.hidden_size)
+    
+    def initCell(self):
+        return torch.zeros(1, 1, self.cell_size)
+
+class GRU(nn.Module):
+    def __init__(self, input_size, hidden_size, output_size):
+        super(GRU, self).__init__()
+
+        self.hidden_size = hidden_size
+        self.gru = nn.GRU(input_size, hidden_size)
+        self.fc = nn.Linear(hidden_size*1, output_size)
+        self.log_softmax = nn.LogSoftmax()
+
+    def forward(self, x, h):
+        out, hid = self.gru(x, h)
+        out = out.squeeze()
+        out = self.fc(out)
+        out = self.log_softmax(out)
+        return out, hid
+    
+    def initHidden(self):
+        return torch.zeros(1, 1, self.hidden_size)
+
 def randomChoice(l):
     return l[random.randint(0, len(l) - 1)]
 
@@ -82,7 +127,19 @@ def randomTrainingExample():
     return category, line, category_tensor, line_tensor
 
 n_hidden = 128
-rnn = RNN(n_letters, n_hidden, n_categories).to(device)
+n_cells = 128
+criterion = nn.NLLLoss()
+learning_rate = 0.005
+
+if choice==1:
+    rnn = RNN(n_letters, n_hidden, n_categories).to(device)
+    optimizer = opt.Adam(rnn.parameters(), lr=learning_rate)
+elif choice==2:
+    lstm = LSTM(n_letters, n_hidden, n_cells, n_categories).to(device)
+    optimizer = opt.Adam(lstm.parameters(), lr=learning_rate)
+else:
+    gru = GRU(n_letters, n_hidden, n_categories).to(device)
+    optimizer = opt.Adam(gru.parameters(), lr=learning_rate)
 
 # Example
 #input = lineToTensor('Albert')
@@ -91,23 +148,25 @@ rnn = RNN(n_letters, n_hidden, n_categories).to(device)
 #output, next_hidden = rnn(input[0].reshape(1, 1, input[0].shape[1]), hidden.reshape(1, 1, hidden.shape[1]))
 #print(output.shape, next_hidden.shape)
 
-criterion = nn.NLLLoss()
-learning_rate = 0.005
-optimizer = opt.Adam(rnn.parameters(), lr=learning_rate)
-
 def train(category_tensor, line_tensor):
-    hidden = rnn.initHidden().to(device)
-
-    rnn.zero_grad()
-
-    for i in range(line_tensor.size()[0]):
-        output, hidden = rnn(line_tensor[i].reshape(1, 1, line_tensor[i].shape[1]), hidden)
-
-    #output = torch.tensor([torch.argmax(output)])
-    #print(output.shape)
+    if choice==1:
+        hidden = rnn.initHidden().to(device)
+        rnn.zero_grad()
+        for i in range(line_tensor.size()[0]):
+            output, hidden = rnn(line_tensor[i].reshape(1, 1, line_tensor[i].shape[1]), hidden)
+    elif choice==2:
+        hidden = lstm.initHidden().to(device)
+        cell = lstm.initCell().to(device)
+        lstm.zero_grad()
+        for i in range(line_tensor.size()[0]):
+            output, (hidden, cell) = lstm(line_tensor[i].reshape(1, 1, line_tensor[i].shape[1]), (hidden, cell))
+    else:
+        hidden = gru.initHidden().to(device)
+        gru.zero_grad()
+        for i in range(line_tensor.size()[0]):
+            output, hidden = gru(line_tensor[i].reshape(1, 1, line_tensor[i].shape[1]), hidden)
+            
     output = output.reshape(1, output.shape[0])
-    #print("output", output)
-    #print("CT", category_tensor)
     loss = criterion(output, category_tensor)
     loss.backward()
     optimizer.step()
