@@ -1,3 +1,4 @@
+#%%
 import io
 import glob
 import os
@@ -193,17 +194,18 @@ start = time.time()
 
 for epoch in range(1, num_epochs+1):
     category, line, category_tensor, line_tensor = randomTrainingExample()
-    output, loss = train(category_tensor, line_tensor)
+    output, current_loss = train(category_tensor, line_tensor)
 
     if epoch % print_every == 0:
-        print('%d %d%% (%s) %.4f'  % (epoch, epoch / num_epochs * 100, timeSince(start), loss))
+        print('%d %d%% (%s) %.4f'  % (epoch, epoch / num_epochs * 100, timeSince(start), current_loss))
 
     if epoch % plot_every == 0:
         all_losses.append(current_loss / plot_every)
         current_loss = 0
 
+#%%
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 
-plt.figure()
 plt.plot(all_losses)   
+plt.show()
